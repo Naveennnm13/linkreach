@@ -1,0 +1,7 @@
+# Test and audit tools only. Constrained to the runtime lock so versions agree.
+-c requirements.txt
+pytest
+httpx
+pip-audit
+bandit
+pip-tools

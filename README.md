@@ -1,0 +1,168 @@
+# linkreach
+
+A Python CLI that finds recruiters and product leaders at established companies, drafts a connection note and a follow-up for each with the Claude API, sends the requests you approve on LinkedIn through Playwright, and tracks results in a local dashboard.
+
+> **Read this first.** LinkedIn's User Agreement prohibits automated tools that access the site or send invitations. The caps, delays, brake, and stop-on-warning rules here lower the risk; they don't remove it. Your account can still be restricted. Follow the rollout plan and keep `send` manual until the numbers say otherwise.
+
+## Required before first use
+
+1. **Full-disk encryption on.** FileVault (macOS) or BitLocker / Device Encryption (Windows). The DB holds names, notes, and your LinkedIn session cookies live in the Chrome profile.
+2. **A monthly spend limit in the Anthropic Console** (Settings → Limits). `draft` makes up to 5 parallel calls and retries on errors, so set a cap you're comfortable losing.
+3. Python 3.11+ and Google Chrome installed.
+
+## Setup
+
+macOS / Linux:
+
+```bash
+cd linkreach
+python3 -m venv .venv && source .venv/bin/activate
+pip install --require-hashes -r requirements.txt
+pip install --no-deps -e .
+```
+
+Windows (PowerShell):
+
+```powershell
+cd linkreach
+python -m venv .venv; .\.venv\Scripts\Activate.ps1
+pip install --require-hashes -r requirements.txt
+pip install --no-deps -e .
+```
+
+`requirements.txt` was locked on Windows. On macOS, run `make lock` (needs `pip install pip-tools`) once to regenerate both lock files for your platform.
+
+Then, in the folder where you want to keep your input files:
+
+```bash
+linkreach init        # copies config.yaml, companies.csv, jobs.csv here (never overwrites)
+linkreach set-key     # stores ANTHROPIC_API_KEY in the OS keychain (hidden input)
+```
+
+Edit `config.yaml`: set `resume_url`, check your background block, and set `doctor_profile_url` to a public profile with an About section. Edit `companies.csv` (companies with 1,000+ employees only). `jobs.csv` is optional.
+
+Key lookup order: OS keychain → `ANTHROPIC_API_KEY` environment variable → `.env` in the input folder → `~/.linkreach/.env`. See `.env.example`.
+
+### The Chrome profile
+
+linkreach uses its own Chrome profile at `~/.linkreach/chrome-profile`, used for LinkedIn and nothing else. It refuses to start if `chrome_profile_dir` points at your everyday Chrome profile or any profile inside it.
+
+To see where your everyday profile lives (so you know what *not* to use), open `chrome://version` in Chrome and read **Profile Path**. The defaults are:
+
+| OS | Default Chrome user-data folder (refused) |
+| --- | --- |
+| macOS | `~/Library/Application Support/Google/Chrome/` (profiles: `Default`, `Profile 1`, …) |
+| Windows | `%LOCALAPPDATA%\Google\Chrome\User Data\` (profiles: `Default`, `Profile 1`, …) |
+| Linux | `~/.config/google-chrome/` |
+
+Sign in once:
+
+```bash
+linkreach login       # opens Chrome on the dedicated profile; you type your password into LinkedIn yourself
+linkreach doctor      # checks selectors, login, API key, caps, DB integrity
+```
+
+linkreach never asks for, reads, or stores your LinkedIn password. Use LinkedIn's own email and password sign-in: "Sign in with Google/Apple" leaves linkedin.com, and the domain allowlist blocks that.
+
+## Rollout plan
+
+1. **Weeks 1 to 3:** run `send` without `--auto`. The tool fills the connect dialog and waits for you to press Enter before it clicks Send.
+2. **Week 1:** keep `companies.csv` to two or three companies until the selectors work end to end.
+3. **Week 4 onward:** switch to `send --auto` if acceptance holds at 25% or higher across 30+ requests older than 7 days. The brake enforces this.
+
+## Daily use
+
+```bash
+linkreach collect --dry-run   # see the planned searches; opens nothing
+linkreach collect             # alumni pass, then each bucket, companies in priority order
+linkreach draft               # Claude writes a note + follow-up for each `collected` person
+linkreach review              # a approve · e edit in $EDITOR · d add detail + redraft · s skip · q quit
+linkreach send                # manual: shows each note, Enter sends, s skips, q quits
+linkreach sync                # every few days: marks 1st-degree connections `accepted`
+linkreach dashboard           # http://127.0.0.1:8765, opens in your browser
+linkreach mark 42 replied     # accepted | followed_up | replied | meeting | referral | dead
+linkreach list --status sent
+linkreach export              # linkreach_export.csv
+linkreach purge --older-than 180d
+```
+
+`review` shows `needs_detail` people first. Type one line of context (e.g. "spoke at Grace Hopper about AI hiring") and press Enter to redraft. A draft that fails validation can't be approved, whether from review, the dashboard, or `mark`.
+
+On Windows, `e` opens Notepad unless you set `EDITOR` (for example `$env:EDITOR = "code --wait"`).
+
+## Scheduling `send --auto`
+
+`send --auto` runs `doctor` first and aborts on any failure. It only sends inside `auto_window` (default weekdays 9:00 to 18:00 local) and refuses to run while the brake is tripped unless you pass `--override-brake`. One run per weekday is enough: each run sends up to the daily cap.
+
+**macOS / Linux (cron):** `crontab -e`, then:
+
+```cron
+# 10:15 on weekdays. Chrome needs your logged-in desktop session, so use your user crontab.
+15 10 * * 1-5 cd /path/to/inputs && /path/to/linkreach/.venv/bin/linkreach send --auto >> ~/.linkreach/logs/cron.out 2>&1
+```
+
+On macOS, give `cron` Full Disk Access (System Settings → Privacy & Security) if the job can't read `~/.linkreach`.
+
+**Windows (Task Scheduler):** run once in PowerShell:
+
+```powershell
+schtasks /Create /TN "linkreach send" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 10:15 /TR "\"C:\path\to\linkreach\.venv\Scripts\linkreach.exe\" --inputs \"C:\path\to\inputs\" send --auto"
+```
+
+Keep the default "Run only when user is logged on" so Chrome can open a window.
+
+## Safety rules and where they live
+
+| Rule | Where |
+| --- | --- |
+| 40 page views/day, 20 requests/day, 80 per rolling 7 days. Config can lower these, never raise them. | `config.py` (ceilings), `safety.py` (counts from `activity_log`) |
+| Random 8 to 25 s between page loads | `linkedin.py: LinkedIn.visit` |
+| CAPTCHA, security check, "unusual activity", restriction page: log it, stop at once, no retry | `linkedin.py: detect_stop`, phrases and selectors in `selectors.py` |
+| Only approved drafts are sent, and each is re-validated before typing | `commands/send.py` |
+| Acceptance brake: 30+ requests older than 7 days below 25% disables `--auto` | `safety.py: brake_status` |
+| Send fails or Pending doesn't appear → `failed`, move on | `commands/send.py` |
+| Selectors fail on 3 profiles in a row → stop, screenshot, `selector_broken` | `commands/common.py: FailStreak` |
+| No duplicate sends after a crash: `send_attempted_at` is committed before the click | `commands/send.py` |
+| Never contact the same person twice: `profile_url` is unique and normalized; known URLs are skipped before any profile view | `db.py`, `commands/collect.py` |
+
+## Security notes
+
+**Browser isolation.** Dedicated profile only. Top-level navigation is allowed to `linkedin.com` and `licdn.com` (plus subdomains); anything else aborts the run, and third-party subresources are blocked. The code never calls `page.evaluate`.
+
+**Prompt injection.** Scraped text is stripped of HTML, control, and zero-width characters and capped at 500 characters per field. Fields that contain instruction-like text, URLs, or emails are dropped from the prompt. The rest goes inside `<profile_data>` tags with a system prompt saying it's untrusted data. The model writes only the variable pieces (opener, tie line, two points). Code assembles the final messages from your templates, then `validate.py` rejects any URL other than `resume_url`, emails, phone numbers, instruction patterns ("ignore", "system prompt", "as an AI"), banned phrases, HTML, and length overruns.
+
+**Dashboard.** Bound to `127.0.0.1:8765`. Requests with a Host header other than `127.0.0.1:8765` or `localhost:8765` get 403 (DNS rebinding). A random 32-byte token is created at each start and passed in the URL fragment, which browsers never send to the server. Every `/api` call must carry it in `X-Linkreach-Token`. No CORS headers. State changes are POST only. All data renders through `textContent`. CSP is `default-src 'self'` plus a per-launch nonce for the page's single inline `<script>` and `<style>` block (the spec asks for both a one-file page and `default-src 'self'`; the nonce lets both hold without `unsafe-inline`).
+
+**Secrets.** API key from the keychain. Logs are JSON, rotate at 10 MB × 5, and pass through a redaction filter that scrubs API keys, cookies, the dashboard token, and any note/follow-up/message field. Code never logs message bodies in the first place.
+
+**Data at rest.** Everything private lives in `~/.linkreach/` (override with `LINKREACH_HOME`): folder 700, files 600. On Windows, `chmod` only toggles read-only. The folder sits inside your user profile, which Windows already restricts to your account, and BitLocker covers the rest.
+
+**Dependencies.** Exact pins with hashes (`pip-compile --generate-hashes`). `make check` (or `python scripts/check.py` on Windows) runs `pip-audit --strict` and `bandit`, failing on any known vulnerability or high-severity finding. Runtime dependencies are only the allowed list. Dev-only: `pytest`, `httpx` (FastAPI's test client needs it), `pip-audit`, `bandit`, and `pip-tools` (to build the lock file).
+
+## When LinkedIn changes its UI
+
+`doctor` fails, or a run stops with `selector_broken` and a screenshot in `~/.linkreach/logs/screenshots/`. Open `linkreach/selectors.py`, where every selector is a list of fallbacks. Inspect the element in the dedicated Chrome profile, put the new selector first, and rerun `linkreach doctor`.
+
+## Exit codes
+
+`0` ok (cap reached counts as ok) · `2` input files invalid · `3` stopped by a CAPTCHA, warning, or off-domain navigation · `5` selectors broken · `6` doctor failed · `7` `--auto` refused (window or brake) · `130` interrupted.
+
+## Tests
+
+```bash
+pip install --require-hashes -r requirements-dev.txt
+python -m pytest            # make test
+python scripts/check.py     # make check
+python scripts/demo_dashboard.py   # dashboard with fake data at http://127.0.0.1:8765/#token=demo-token-not-secret
+```
+
+The tests use a fake browser (`tests/fakes.py`) and a fake Claude client, so they never touch LinkedIn or the API. They cover caps, the brake, dedupe, status transitions, CAPTCHA stops, crash-resume, injection, dashboard hardening, and log redaction.
+
+## Where this goes beyond the spec
+
+- **Extra `people` columns:** `user_detail` (your one-line context from review), `validation_errors`, `send_attempted_at` (duplicate-send guard), `updated_at`.
+- **Extra commands:** `init`, `login`, `set-key`, `list`.
+- **Searches** use each company's People tab (`/company/<slug>/people/?keywords=`), which lists only current employees and needs no numeric company ID. With `combine_keywords: true`, each bucket costs one page view (`"a" OR "b"`) instead of one per keyword. An alumni pass (keyword = `alumni_school`) runs first for each company.
+- **Approval** happens only in `review`. The dashboard can set every other status by hand, but not `approved`.
+- **Templates** for both messages live in `config.yaml`. The model fills in the pieces, and code enforces the 280-character and 150-word limits (3 tries, then flagged for manual edit).
+- **Model:** `claude-sonnet-5-5`, with server-side refusal fallbacks on (`use_refusal_fallbacks`). Prompt caching covers the system prompt and background block. Very short configs may fall under the minimum cacheable size, in which case caching quietly doesn't apply.

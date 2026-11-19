@@ -1,0 +1,28 @@
+# secrets and private data — never commit
+.env
+.env.*
+!.env.example
+linkreach.db
+linkreach.db-*
+*.db
+logs/
+chrome-profile/
+.linkreach/
+linkreach_export.csv
+linkreach_people.csv
+
+# inputs you fill in (examples live in linkreach/examples/)
+/config.yaml
+/companies.csv
+/jobs.csv
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage

@@ -1,0 +1,104 @@
+# linkreach configuration. Every field is validated at startup.
+
+# Hard caps. You may lower these; values above 40 / 20 / 80 are rejected.
+caps:
+  daily_views: 40        # profile + search page loads per local day
+  daily_requests: 20     # connection requests per local day
+  weekly_requests: 80    # connection requests per rolling 7 days
+
+per_company_limit: 6     # max people collected per company, ever
+combine_keywords: true   # one search per bucket ("a" OR "b") instead of one per keyword
+
+delay:                   # random wait between page loads (minimum 8 s)
+  min_seconds: 8
+  max_seconds: 25
+
+# Role buckets. Order matters: a title is matched against buckets top to bottom.
+buckets:
+  recruiter:
+    keywords: [technical recruiter, talent acquisition, university recruiter, early career recruiter]
+    angle: "Dec 2026 grad, PM/TPM roles, ask about open reqs"
+  ai_lead:
+    keywords: [AI product, ML product, AI platform]
+    angle: "AI PM background, ask about their roadmap"
+  leader:
+    keywords: [director of product, director of program, senior director product, head of product]
+    angle: "Specific product or org of theirs, ask for 15 minutes"
+  ic:
+    keywords: [senior product manager, principal product manager, group product manager, senior technical program manager]
+    angle: "Shared domain, ask about the team"
+
+alumni_school: Northeastern
+alumni_angle: "Lead with Northeastern, highest priority"
+
+exclude_title_keywords: [intern, associate, coordinator, assistant, freelance]
+
+background: |
+  Naveen Murali
+  - Product Manager with 3+ years shipping AI-powered enterprise SaaS and ERP platforms
+  - Bizom: owned an AI-enabled ERP/SaaS platform across 15+ clients including Godrej
+    and Castrol, drove $10M+ revenue; shipped an AI image-recognition module that
+    lifted conversion by 25%
+  - Vestmark (TPM Co-op): consolidated 40+ legacy reporting systems into 8 workflows,
+    cut decision latency by 70%; built a Python + LLM tool that cut reporting time
+    from hours to minutes
+  - M.S. Engineering Management, Northeastern University, graduating December 2026
+  - U.S. work authorization through OPT, no sponsorship needed (change in status
+    ahead of naturalization in 2027)
+  - Builds independent AI projects (RAG/LangChain agents, credit risk models with
+    SHAP/XGBoost)
+
+# The follow-up message links to this, since the tool can't attach files to LinkedIn DMs.
+resume_url: https://example.com/naveen-murali-resume.pdf   # CHANGE ME
+
+banned_phrases: [synergy, leverage, passionate about disrupting, circle back, i hope this finds you well]
+
+model: claude-sonnet-5-5
+use_refusal_fallbacks: true   # server-side fallback if the model declines a request
+
+note_max_chars: 280           # LinkedIn's limit is 300
+followup_max_words: 150
+follow_up_delay_days: 5
+
+brake:
+  min_sample: 30     # requests older than age_days before the brake can trip
+  min_rate: 0.25     # trips below this acceptance rate
+  age_days: 7
+
+auto_window:         # send --auto only runs inside this window (local time)
+  days: [mon, tue, wed, thu, fri]
+  start: "09:00"
+  end: "18:00"
+
+# Dedicated profile, used for LinkedIn only. Your everyday Chrome profile is refused.
+chrome_profile_dir: ~/.linkreach/chrome-profile
+chrome_channel: chrome     # use installed Google Chrome
+headless: false
+
+# A public profile that `doctor` loads to check selectors. Pick one with an About section.
+doctor_profile_url: https://www.linkedin.com/in/williamhgates/   # CHANGE ME if you like
+
+# Code fills these templates; the model writes only the {opener}, {tie_line}, {point1}, {point2} pieces.
+templates:
+  note: >-
+    Hi {first_name}, {opener} I'm a PM with 3+ years in AI SaaS, finishing my MS at
+    Northeastern (Dec 2026). {tie_line} Would like to connect.
+  followup: |-
+    Dear {first_name},
+
+    {opener}
+
+    My name is Naveen Murali, and I'm a Product Manager with 3+ years of experience shipping AI-powered enterprise SaaS and ERP platforms. I'm currently completing a Master's in Engineering Management at Northeastern University, graduating December 2026. {role_sentence}
+
+    A few things pulled me toward reaching out:
+
+    1. {point1}
+    2. {point2}
+
+    My resume: {resume_url}. I hold U.S. work authorization through OPT and won't need employer sponsorship, as I'm undergoing a change in status ahead of naturalization in 2027. I'd welcome a quick call to talk through fit.
+
+    Best,
+    Naveen
+  role_with_job: "I'm writing about the {job_title} role at {company}."
+  role_without_job: "I'm exploring PM and TPM roles at {company}."
+  email_subject: "{job_title} - Naveen Murali"

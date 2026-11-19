@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linkreach"
+version = "0.1.0"
+description = "Find, draft, send, and track LinkedIn outreach with hard safety rails."
+requires-python = ">=3.11"
+# Exact pins with hashes live in requirements.txt (pip-compile --generate-hashes).
+dependencies = [
+  "playwright",
+  "anthropic",
+  "fastapi",
+  "uvicorn",
+  "pydantic",
+  "keyring",
+  "pyyaml",
+  "rich",
+]
+
+[project.scripts]
+linkreach = "linkreach.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["linkreach*"]
+
+[tool.setuptools.package-data]
+linkreach = ["examples/*", "dashboard/index.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]

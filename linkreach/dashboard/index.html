@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>linkreach dashboard</title>
+<style nonce="__NONCE__">
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --text: #1b1f24; --muted: #5d6673;
+  --border: #dde1e6; --accent: #0a66c2; --accent-weak: #e3effb; --good: #1a7f37; --good-weak: #e6f4ea;
+  --warn: #9a6700; --warn-weak: #fff4d6; --bad: #c62828; --bad-weak: #fdecea; --alumni: #7b3fbf;
+  --alumni-weak: #f1e8fb; --chart-1: #0a66c2; --chart-2: #7b3fbf; --grid: #e7eaee;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --panel-2: #1f242b; --text: #e6e9ed; --muted: #9aa4b1;
+    --border: #2b323b; --accent: #4f9be8; --accent-weak: #16283b; --good: #4cc26b; --good-weak: #13291b;
+    --warn: #e0b341; --warn-weak: #2d2510; --bad: #ff6b6b; --bad-weak: #351a1a; --alumni: #b48af0;
+    --alumni-weak: #2a1f3b; --chart-1: #4f9be8; --chart-2: #b48af0; --grid: #262c34; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --panel-2: #1f242b; --text: #e6e9ed; --muted: #9aa4b1;
+  --border: #2b323b; --accent: #4f9be8; --accent-weak: #16283b; --good: #4cc26b; --good-weak: #13291b;
+  --warn: #e0b341; --warn-weak: #2d2510; --bad: #ff6b6b; --bad-weak: #351a1a; --alumni: #b48af0;
+  --alumni-weak: #2a1f3b; --chart-1: #4f9be8; --chart-2: #b48af0; --grid: #262c34; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 20px 10px; }
+.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 17px; margin: 0 12px 0 0; letter-spacing: .2px; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+.tiles { display: flex; gap: 10px; flex-wrap: wrap; flex: 1; }
+.tile { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; min-width: 118px; }
+.tile .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.tile .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .v small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
+.pill.off { background: var(--good-weak); color: var(--good); }
+.pill.on { background: var(--bad-weak); color: var(--bad); }
+.pill.overridden { background: var(--warn-weak); color: var(--warn); }
+.runs { margin-top: 8px; font-size: 12px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+.runs b { color: var(--text); font-weight: 600; }
+.banner { background: var(--bad); color: #fff; padding: 10px 20px; font-weight: 600; }
+.banner[hidden] { display: none; }
+nav { display: flex; gap: 2px; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--border); overflow-x: auto; }
+nav button { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 10px 14px; font: inherit; cursor: pointer; white-space: nowrap; }
+nav button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+main { padding: 16px 20px 40px; }
+section[hidden] { display: none; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+input, select, textarea, button.btn { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+button.btn { cursor: pointer; }
+button.btn:hover { border-color: var(--accent); }
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.btn:disabled { opacity: .5; cursor: default; }
+input[type="search"] { min-width: 220px; }
+.count { color: var(--muted); font-size: 12px; margin-left: auto; }
+.tablewrap { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--panel-2); position: sticky; top: 0; white-space: nowrap; }
+tbody tr:hover { background: var(--panel-2); }
+tbody tr.clickable { cursor: pointer; }
+tr.flag td { background: var(--warn-weak); }
+td.num { font-variant-numeric: tabular-nums; text-align: right; }
+td.date { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+td.notes { max-width: 240px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.badge { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; font-weight: 600; }
+.badge.alumni { background: var(--alumni-weak); color: var(--alumni); }
+.badge.bucket { background: var(--accent-weak); color: var(--accent); }
+.status-sel { padding: 2px 4px; font-size: 13px; }
+aside { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--panel); border-left: 1px solid var(--border); box-shadow: -8px 0 24px rgba(0,0,0,.12); padding: 18px; overflow-y: auto; z-index: 10; }
+aside[hidden] { display: none; }
+aside .close { float: right; }
+aside dl { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; margin: 10px 0; }
+aside dt { color: var(--muted); font-size: 12px; }
+aside dd { margin: 0; overflow-wrap: anywhere; }
+pre.msg { white-space: pre-wrap; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 6px 0 12px; overflow-wrap: anywhere; }
+textarea { width: 100%; min-height: 90px; resize: vertical; }
+.hist { font-size: 12px; color: var(--muted); padding-left: 16px; margin: 6px 0 12px; }
+.cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.card .meta { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.card .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.empty { color: var(--muted); padding: 24px; text-align: center; }
+.grid2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
+.chart { width: 100%; height: auto; display: block; }
+.chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+.chart .lbl { fill: var(--text); }
+.chart .grid { stroke: var(--grid); }
+.chart .bar { fill: var(--chart-1); }
+.chart .bar2 { fill: var(--chart-2); }
+.chart .line { stroke: var(--chart-1); fill: none; stroke-width: 2; }
+.chart .dot { fill: var(--chart-1); }
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 6px; font-size: 13px; z-index: 20; }
+.toast[hidden] { display: none; }
+.ev-captcha, .ev-stop, .ev-selector_broken { color: var(--bad); font-weight: 600; }
+.ev-fail { color: var(--warn); }
+.ev-send { color: var(--good); }
+@media (max-width: 640px) {
+  header, main { padding-left: 16px; padding-right: 16px; }
+  nav { padding: 0 8px; }
+  .cards, .grid2 { grid-template-columns: 1fr; }
+  input[type="search"] { min-width: 0; flex: 1 1 100%; }
+}
+</style>
+</head>
+<body>
+<div class="banner" id="banner" hidden></div>
+<header>
+  <div class="top">
+    <h1>linkreach</h1>
+    <div class="tiles">
+      <div class="tile"><div class="k">Sent today</div><div class="v" id="t-today">&ndash;</div></div>
+      <div class="tile"><div class="k">Sent this week</div><div class="v" id="t-week">&ndash;</div></div>
+      <div class="tile"><div class="k">Views today</div><div class="v" id="t-views">&ndash;</div></div>
+      <div class="tile"><div class="k">Acceptance</div><div class="v" id="t-acc">&ndash;</div></div>
+      <div class="tile"><div class="k">Brake</div><div class="v" id="t-brake">&ndash;</div></div>
+    </div>
+    <button class="btn" id="theme" type="button" title="Toggle light/dark">Theme</button>
+    <button class="btn" id="refresh" type="button">Refresh</button>
+  </div>
+  <div class="runs" id="runs"></div>
+</header>
+<nav role="tablist" id="tabs">
+  <button role="tab" data-tab="people" aria-selected="true">People</button>
+  <button role="tab" data-tab="followups" aria-selected="false">Follow-ups</button>
+  <button role="tab" data-tab="companies" aria-selected="false">Companies</button>
+  <button role="tab" data-tab="insights" aria-selected="false">Insights</button>
+  <button role="tab" data-tab="activity" aria-selected="false">Activity log</button>
+</nav>
+<main>
+  <section id="tab-people">
+    <div class="filters">
+      <input type="search" id="f-q" placeholder="Search name or company">
+      <select id="f-company"><option value="">All companies</option></select>
+      <select id="f-bucket"><option value="">All buckets</option></select>
+      <select id="f-status"><option value="">All statuses</option></select>
+      <select id="f-alumni"><option value="">Alumni: any</option><option value="1">Alumni only</option><option value="0">Non-alumni</option></select>
+      <button class="btn" id="export" type="button">Export CSV</button>
+      <span class="count" id="p-count"></span>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Name</th><th>Title</th><th>Company</th><th>Bucket</th><th>Alumni</th><th>Status</th><th>Sent</th><th>Accepted</th><th>Follow-up</th><th>My notes</th></tr></thead>
+        <tbody id="p-body"></tbody>
+      </table>
+    </div>
+  </section>
+  <section id="tab-followups" hidden>
+    <h2>Follow-ups due</h2>
+    <div class="cards" id="fu-list"></div>
+  </section>
+  <section id="tab-companies" hidden>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Company</th><th>Priority</th><th>Collected</th><th>Sent</th><th>Accepted</th><th>Acceptance</th><th>Last contact</th></tr></thead>
+        <tbody id="c-body"></tbody>
+      </table>
+    </div>
+    <p class="count">Highlighted rows: 5+ sends and zero acceptances. Rethink the angle for these.</p>
+  </section>
+  <section id="tab-insights" hidden>
+    <div class="grid2">
+      <div class="card"><h2>Acceptance rate by bucket</h2><div id="ch-bucket"></div></div>
+      <div class="card"><h2>Acceptance rate by week sent</h2><div id="ch-week"></div></div>
+      <div class="card"><h2>Funnel</h2><div id="ch-funnel"></div></div>
+    </div>
+  </section>
+  <section id="tab-activity" hidden>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Time</th><th>Command</th><th>Event</th><th>Person</th><th>Detail</th></tr></thead>
+        <tbody id="a-body"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<aside id="panel" hidden aria-label="Person details"></aside>
+<div class="toast" id="toast" hidden></div>
+
+<script nonce="__NONCE__">
+"use strict";
+// All data is rendered with textContent / setAttribute. No innerHTML anywhere.
+const SVGNS = "http://www.w3.org/2000/svg";
+let TOKEN = "";
+const state = { people: [], statuses: [], summary: null, tab: "people" };
+
+function readToken() {
+  const m = /(?:^|[#&])token=([A-Za-z0-9_\-]+)/.exec(location.hash || "");
+  if (m) {
+    TOKEN = m[1];
+    try { sessionStorage.setItem("linkreach-token", TOKEN); } catch (e) {}
+    history.replaceState(null, "", location.pathname);
+  } else {
+    try { TOKEN = sessionStorage.getItem("linkreach-token") || ""; } catch (e) { TOKEN = ""; }
+  }
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  const headers = { "X-Linkreach-Token": TOKEN };
+  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  const res = await fetch(path, {
+    method: opts.method || "GET",
+    headers: headers,
+    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    credentials: "omit",
+    cache: "no-store",
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    const msg = data && (data.detail || data.error) ? (data.detail || data.error) : ("HTTP " + res.status);
+    throw new Error(String(msg));
+  }
+  return data;
+}
+
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  if (attrs) for (const k of Object.keys(attrs)) {
+    const v = attrs[k];
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "text") node.textContent = String(v);
+    else if (k === "class") node.className = v;
+    else node.setAttribute(k, v === true ? "" : String(v));
+  }
+  if (children) for (const c of children) if (c) node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  return node;
+}
+function svg(tag, attrs) {
+  const node = document.createElementNS(SVGNS, tag);
+  if (attrs) for (const k of Object.keys(attrs)) {
+    if (k === "text") node.textContent = String(attrs[k]);
+    else node.setAttribute(k, String(attrs[k]));
+  }
+  return node;
+}
+function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+function safeHref(url) {
+  return (typeof url === "string" && /^https:\/\/(www\.)?linkedin\.com\//.test(url)) ? url : null;
+}
+function link(url, text) {
+  const href = safeHref(url);
+  if (!href) return document.createTextNode(text || "");
+  return el("a", { href: href, target: "_blank", rel: "noopener noreferrer", text: text || href });
+}
+function d10(v) { return v ? String(v).slice(0, 10) : ""; }
+function pct(v) { return v === null || v === undefined ? "\u2013" : Math.round(v * 100) + "%"; }
+function when(v) {
+  if (!v) return "never";
+  const d = new Date(v);
+  return isNaN(d) ? String(v) : d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+let toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+}
+function setVal(id, main, sub) {
+  const n = document.getElementById(id); clear(n);
+  n.appendChild(document.createTextNode(main));
+  if (sub) n.appendChild(el("small", { text: " " + sub }));
+}
+
+// ---------- summary ----------
+async function loadSummary() {
+  const s = await api("/api/summary");
+  state.summary = s; state.statuses = s.statuses;
+  setVal("t-today", String(s.sent_today), "/ " + s.daily_cap);
+  setVal("t-week", String(s.sent_week), "/ " + s.weekly_cap);
+  setVal("t-views", String(s.views_today), "/ " + s.views_cap);
+  setVal("t-acc", pct(s.acceptance.rate), s.acceptance.accepted + " of " + s.acceptance.sent);
+  const b = document.getElementById("t-brake"); clear(b);
+  b.appendChild(el("span", { class: "pill " + s.brake.status, text: s.brake.status }));
+  b.setAttribute("title", "Requests older than 7 days: " + s.brake.sample + " (trips at " + s.brake.min_sample + "+ below " + pct(s.brake.min_rate) + ")");
+  const runs = document.getElementById("runs"); clear(runs);
+  for (const cmd of Object.keys(s.last_runs)) {
+    const r = s.last_runs[cmd];
+    runs.appendChild(el("span", null, [el("b", { text: cmd }), " " + (r ? when(r.at) + " (" + r.detail + ")" : "never")]));
+  }
+  const banner = document.getElementById("banner");
+  if (s.banner) {
+    banner.textContent = "Last " + s.banner.command + " run stopped (" + s.banner.reason + ") at " + when(s.banner.at) +
+      ". Resolve it on LinkedIn by hand before running again.";
+    banner.hidden = false;
+  } else banner.hidden = true;
+}
+
+// ---------- people ----------
+function fillSelect(sel, values, first) {
+  const keep = sel.value; clear(sel);
+  sel.appendChild(el("option", { value: "", text: first }));
+  for (const v of values) sel.appendChild(el("option", { value: v, text: v }));
+  if (values.indexOf(keep) >= 0) sel.value = keep;
+}
+async function loadPeople() {
+  state.people = await api("/api/people");
+  const companies = [...new Set(state.people.map(p => p.company))].sort();
+  const buckets = [...new Set(state.people.map(p => p.bucket).filter(Boolean))].sort();
+  fillSelect(document.getElementById("f-company"), companies, "All companies");
+  fillSelect(document.getElementById("f-bucket"), buckets, "All buckets");
+  fillSelect(document.getElementById("f-status"), state.statuses, "All statuses");
+  renderPeople();
+}
+function filtered() {
+  const q = document.getElementById("f-q").value.trim().toLowerCase();
+  const co = document.getElementById("f-company").value;
+  const bu = document.getElementById("f-bucket").value;
+  const st = document.getElementById("f-status").value;
+  const al = document.getElementById("f-alumni").value;
+  return state.people.filter(p =>
+    (!q || (p.name || "").toLowerCase().includes(q) || (p.company || "").toLowerCase().includes(q)) &&
+    (!co || p.company === co) && (!bu || p.bucket === bu) && (!st || p.status === st) &&
+    (!al || String(p.is_alumni ? 1 : 0) === al));
+}
+function statusSelect(p) {
+  const sel = el("select", { class: "status-sel", "aria-label": "Status for " + p.name });
+  for (const s of state.statuses) {
+    const o = el("option", { value: s, text: s });
+    if (s === "approved" && p.status !== "approved") o.disabled = true; // approve in `linkreach review`
+    sel.appendChild(o);
+  }
+  sel.value = p.status;
+  sel.addEventListener("click", e => e.stopPropagation());
+  sel.addEventListener("change", async () => {
+    const prev = p.status;
+    try {
+      const r = await api("/api/people/" + p.id + "/status", { method: "POST", body: { status: sel.value } });
+      Object.assign(p, r.person);
+      toast(p.name + " → " + p.status);
+      renderPeople(); loadSummary();
+    } catch (e) { sel.value = prev; toast("Not changed: " + e.message); }
+  });
+  return sel;
+}
+function renderPeople() {
+  const body = document.getElementById("p-body"); clear(body);
+  const rows = filtered();
+  document.getElementById("p-count").textContent = rows.length + " of " + state.people.length + " people";
+  if (!rows.length) {
+    body.appendChild(el("tr", null, [el("td", { colspan: 10, class: "empty", text: "No people match." })]));
+    return;
+  }
+  for (const p of rows) {
+    const nameLink = link(p.profile_url, p.name);
+    if (nameLink.addEventListener) nameLink.addEventListener("click", e => e.stopPropagation());
+    const tr = el("tr", { class: "clickable" }, [
+      el("td", null, [nameLink]),
+      el("td", { text: p.title || "" }),
+      el("td", { text: p.company }),
+      el("td", null, [p.bucket ? el("span", { class: "badge bucket", text: p.bucket }) : null]),
+      el("td", null, [p.is_alumni ? el("span", { class: "badge alumni", text: "alumni" }) : null]),
+      el("td", null, [statusSelect(p)]),
+      el("td", { class: "date", text: d10(p.sent_at) }),
+      el("td", { class: "date", text: d10(p.accepted_at) }),
+      el("td", { class: "date", text: p.follow_up_date || "" }),
+      el("td", { class: "notes", text: p.my_notes || "" }),
+    ]);
+    tr.addEventListener("click", () => openPanel(p.id));
+    body.appendChild(tr);
+  }
+}
+async function openPanel(id) {
+  const panel = document.getElementById("panel"); clear(panel); panel.hidden = false;
+  let data;
+  try { data = await api("/api/people/" + id); } catch (e) { panel.appendChild(el("p", { text: e.message })); return; }
+  const p = data.person;
+  const close = el("button", { class: "btn close", type: "button", text: "Close" });
+  close.addEventListener("click", () => { panel.hidden = true; });
+  panel.appendChild(close);
+  panel.appendChild(el("h2", { text: p.name }));
+  panel.appendChild(el("div", null, [link(p.profile_url, "Open LinkedIn profile")]));
+  const dl = el("dl");
+  const add = (k, v) => { dl.appendChild(el("dt", { text: k })); dl.appendChild(el("dd", { text: v || "\u2013" })); };
+  add("Title", p.title); add("Company", p.company); add("Bucket", (p.bucket || "") + (p.is_alumni ? " · alumni" : ""));
+  add("Status", p.status); add("Target role", p.job_title); add("Collected", d10(p.collected_at));
+  add("Sent", d10(p.sent_at)); add("Accepted", d10(p.accepted_at)); add("Follow-up due", p.follow_up_date);
+  add("Context 1", p.context_1); add("Context 2", p.context_2);
+  if (p.validation_errors) add("Validation", p.validation_errors);
+  panel.appendChild(dl);
+  panel.appendChild(el("h2", { text: p.note_sent ? "Note sent" : "Note draft (not sent)" }));
+  panel.appendChild(el("pre", { class: "msg", text: p.note_sent || p.note_draft || "\u2013" }));
+  panel.appendChild(el("h2", { text: "Follow-up draft" }));
+  panel.appendChild(el("pre", { class: "msg", text: p.followup_draft || "\u2013" }));
+  panel.appendChild(el("h2", { text: "Status history" }));
+  const ul = el("ul", { class: "hist" });
+  for (const h of data.history) ul.appendChild(el("li", { text: when(h.changed_at) + ": " + (h.old_status || "new") + " → " + h.new_status + " (" + h.source + ")" }));
+  panel.appendChild(ul);
+  panel.appendChild(el("h2", { text: "My notes" }));
+  const ta = el("textarea", { maxlength: 5000, "aria-label": "My notes" }); ta.value = p.my_notes || "";
+  const save = el("button", { class: "btn primary", type: "button", text: "Save notes" });
+  save.addEventListener("click", async () => {
+    try {
+      await api("/api/people/" + id + "/notes", { method: "POST", body: { my_notes: ta.value } });
+      const local = state.people.find(x => x.id === id); if (local) local.my_notes = ta.value;
+      renderPeople(); toast("Notes saved");
+    } catch (e) { toast("Save failed: " + e.message); }
+  });
+  panel.appendChild(ta); panel.appendChild(el("div", null, [save]));
+}
+function csvCell(v) {
+  let s = v === null || v === undefined ? "" : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // spreadsheet formula injection
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function exportCsv() {
+  const cols = ["id", "name", "title", "company", "profile_url", "bucket", "is_alumni", "status", "sent_at", "accepted_at", "follow_up_date", "my_notes"];
+  const lines = [cols.join(",")].concat(filtered().map(p => cols.map(c => csvCell(p[c])).join(",")));
+  const blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = el("a", { href: URL.createObjectURL(blob), download: "linkreach_people.csv" });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+// ---------- follow-ups ----------
+async function loadFollowups() {
+  const list = document.getElementById("fu-list"); clear(list);
+  const items = await api("/api/followups");
+  if (!items.length) { list.appendChild(el("div", { class: "empty", text: "No follow-ups due today." })); return; }
+  for (const f of items) {
+    const pre = el("pre", { class: "msg", text: f.followup_draft || "(no follow-up drafted)" });
+    const copy = el("button", { class: "btn primary", type: "button", text: "Copy" });
+    copy.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(pre.textContent); toast("Copied"); } catch (e) { toast("Copy failed; select the text by hand"); }
+    });
+    const regen = el("button", { class: "btn", type: "button", text: "Regenerate" });
+    regen.addEventListener("click", async () => {
+      regen.disabled = true; regen.textContent = "Regenerating\u2026";
+      try { const r = await api("/api/people/" + f.id + "/followup/regenerate", { method: "POST", body: {} }); pre.textContent = r.followup_draft; toast("Regenerated"); }
+      catch (e) { toast(e.message); }
+      regen.disabled = false; regen.textContent = "Regenerate";
+    });
+    const done = el("button", { class: "btn", type: "button", text: "Done" });
+    done.addEventListener("click", async () => {
+      try { await api("/api/people/" + f.id + "/followup/done", { method: "POST", body: {} }); toast("Marked followed_up"); refreshAll(); } catch (e) { toast(e.message); }
+    });
+    const snooze = el("button", { class: "btn", type: "button", text: "Snooze 5 days" });
+    snooze.addEventListener("click", async () => {
+      try { const r = await api("/api/people/" + f.id + "/followup/snooze", { method: "POST", body: {} }); toast("Snoozed to " + r.follow_up_date); refreshAll(); } catch (e) { toast(e.message); }
+    });
+    list.appendChild(el("div", { class: "card" }, [
+      el("h2", { text: f.name }),
+      el("div", { class: "meta", text: (f.title || "") + " · " + f.company + " · due " + f.follow_up_date }),
+      el("div", { class: "meta", text: "Email subject: " + f.email_subject }),
+      pre,
+      el("div", { class: "actions" }, [copy, regen, link(f.profile_url, "Open profile"), done, snooze]),
+    ]));
+  }
+}
+
+// ---------- companies ----------
+async function loadCompanies() {
+  const body = document.getElementById("c-body"); clear(body);
+  const rows = await api("/api/companies");
+  if (!rows.length) { body.appendChild(el("tr", null, [el("td", { colspan: 7, class: "empty", text: "No companies yet." })])); return; }
+  for (const c of rows) body.appendChild(el("tr", { class: c.flag ? "flag" : null }, [
+    el("td", { text: c.company }), el("td", { class: "num", text: c.priority || "\u2013" }),
+    el("td", { class: "num", text: c.collected }), el("td", { class: "num", text: c.sent }),
+    el("td", { class: "num", text: c.accepted }), el("td", { class: "num", text: pct(c.rate) }),
+    el("td", { class: "date", text: d10(c.last_contact) || "\u2013" }),
+  ]));
+}
+
+// ---------- insights (hand-drawn SVG) ----------
+function barChart(container, items, label, value, fmt, cls) {
+  clear(container);
+  if (!items.length) { container.appendChild(el("div", { class: "empty", text: "No sent requests yet." })); return; }
+  const rowH = 26, left = 110, right = 60, W = 520, H = items.length * rowH + 10;
+  const max = Math.max(1e-9, ...items.map(value));
+  const s = svg("svg", { viewBox: "0 0 " + W + " " + H, class: "chart", role: "img" });
+  items.forEach((it, i) => {
+    const y = 5 + i * rowH, w = Math.max(1, (W - left - right) * value(it) / max);
+    s.appendChild(svg("text", { x: left - 8, y: y + 16, "text-anchor": "end", class: "lbl", text: label(it) }));
+    s.appendChild(svg("rect", { x: left, y: y + 3, width: w, height: rowH - 8, rx: 3, class: cls || "bar" }));
+    s.appendChild(svg("text", { x: left + w + 6, y: y + 16, text: fmt(it) }));
+  });
+  container.appendChild(s);
+}
+function lineChart(container, items) {
+  clear(container);
+  if (!items.length) { container.appendChild(el("div", { class: "empty", text: "No sent requests yet." })); return; }
+  const W = 520, H = 220, l = 40, r = 16, t = 14, b = 34;
+  const s = svg("svg", { viewBox: "0 0 " + W + " " + H, class: "chart", role: "img" });
+  for (const v of [0, 0.25, 0.5, 0.75, 1]) {
+    const y = t + (H - t - b) * (1 - v);
+    s.appendChild(svg("line", { x1: l, x2: W - r, y1: y, y2: y, class: "grid" }));
+    s.appendChild(svg("text", { x: l - 6, y: y + 4, "text-anchor": "end", text: Math.round(v * 100) + "%" }));
+  }
+  const n = items.length, step = n > 1 ? (W - l - r) / (n - 1) : 0;
+  const pts = items.map((it, i) => [l + (n > 1 ? i * step : (W - l - r) / 2), t + (H - t - b) * (1 - (it.sent ? it.accepted / it.sent : 0))]);
+  if (n > 1) s.appendChild(svg("polyline", { points: pts.map(p => p.join(",")).join(" "), class: "line" }));
+  pts.forEach((p, i) => {
+    const it = items[i];
+    const dot = svg("circle", { cx: p[0], cy: p[1], r: 4, class: "dot" });
+    dot.appendChild(svg("title", { text: "Week of " + it.week + ": " + it.accepted + "/" + it.sent + " accepted" }));
+    s.appendChild(dot);
+    if (n <= 12 || i % Math.ceil(n / 12) === 0) s.appendChild(svg("text", { x: p[0], y: H - 12, "text-anchor": "middle", text: it.week.slice(5) }));
+  });
+  container.appendChild(s);
+}
+async function loadInsights() {
+  const d = await api("/api/insights");
+  barChart(document.getElementById("ch-bucket"), d.by_bucket, it => it.bucket, it => it.sent ? it.accepted / it.sent : 0,
+    it => pct(it.sent ? it.accepted / it.sent : 0) + " (" + it.accepted + "/" + it.sent + ")");
+  lineChart(document.getElementById("ch-week"), d.by_week);
+  barChart(document.getElementById("ch-funnel"), d.funnel, it => it.stage, it => it.count, it => String(it.count), "bar2");
+}
+
+// ---------- activity ----------
+async function loadActivity() {
+  const body = document.getElementById("a-body"); clear(body);
+  const rows = await api("/api/activity?limit=500");
+  const names = new Map(state.people.map(p => [p.id, p.name]));
+  if (!rows.length) { body.appendChild(el("tr", null, [el("td", { colspan: 5, class: "empty", text: "No activity yet." })])); return; }
+  for (const a of rows) body.appendChild(el("tr", null, [
+    el("td", { class: "date", text: when(a.timestamp) }), el("td", { text: a.command }),
+    el("td", { class: "ev-" + a.event, text: a.event }),
+    el("td", { text: a.person_id ? (names.get(a.person_id) || ("#" + a.person_id)) : "" }),
+    el("td", { text: a.detail || "" }),
+  ]));
+}
+
+// ---------- shell ----------
+function showTab(name) {
+  state.tab = name;
+  for (const b of document.querySelectorAll("#tabs button")) b.setAttribute("aria-selected", b.dataset.tab === name ? "true" : "false");
+  for (const s of document.querySelectorAll("main > section")) s.hidden = s.id !== "tab-" + name;
+  loadTab(name);
+}
+async function loadTab(name) {
+  try {
+    if (name === "people") await loadPeople();
+    else if (name === "followups") await loadFollowups();
+    else if (name === "companies") await loadCompanies();
+    else if (name === "insights") await loadInsights();
+    else if (name === "activity") { if (!state.people.length) state.people = await api("/api/people"); await loadActivity(); }
+  } catch (e) { toast("Load failed: " + e.message); }
+}
+async function refreshAll() {
+  try { await loadSummary(); } catch (e) { toast("Load failed: " + e.message); return; }
+  await loadTab(state.tab);
+}
+function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem("linkreach-theme"); } catch (e) {}
+  if (saved === "light" || saved === "dark") document.documentElement.setAttribute("data-theme", saved);
+  document.getElementById("theme").addEventListener("click", () => {
+    const cur = document.documentElement.getAttribute("data-theme") ||
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("linkreach-theme", next); } catch (e) {}
+  });
+}
+
+readToken();
+initTheme();
+for (const b of document.querySelectorAll("#tabs button")) b.addEventListener("click", () => showTab(b.dataset.tab));
+for (const id of ["f-q", "f-company", "f-bucket", "f-status", "f-alumni"]) document.getElementById(id).addEventListener("input", renderPeople);
+document.getElementById("export").addEventListener("click", exportCsv);
+document.getElementById("refresh").addEventListener("click", refreshAll);
+document.addEventListener("keydown", e => { if (e.key === "Escape") document.getElementById("panel").hidden = true; });
+window.addEventListener("hashchange", () => {
+  const had = TOKEN;
+  readToken();
+  if (TOKEN && TOKEN !== had) { document.getElementById("banner").hidden = true; refreshAll(); }
+});
+if (!TOKEN) {
+  const b = document.getElementById("banner");
+  b.textContent = "No access token. Open the link printed by `linkreach dashboard`.";
+  b.hidden = false;
+} else {
+  refreshAll();
+}
+</script>
+</body>
+</html>

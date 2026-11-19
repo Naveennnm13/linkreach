@@ -1,0 +1,10 @@
+# Runtime dependencies. The allowed list is fixed by the build spec; adding one
+# needs a README note explaining why. Regenerate the lock file with `make lock`.
+playwright
+anthropic
+fastapi
+uvicorn
+pydantic
+keyring
+pyyaml
+rich
