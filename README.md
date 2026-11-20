@@ -86,6 +86,19 @@ linkreach export              # linkreach_export.csv
 linkreach purge --older-than 180d
 ```
 
+### Approving in the dashboard
+
+`linkreach dashboard` opens on the **Review** tab, a point-and-click version of `linkreach review`:
+
+- Each card shows the person, the profile details the draft used, the connection note with a character count, and the follow-up (click to expand).
+- **Approve** (`a`) re-validates the stored draft on the server first. A draft that fails moves to Needs detail with the reason shown. **Decline** (`x`) marks the person `skipped`. Both show an Undo for 6 seconds.
+- **Edit** (`e`) opens the note and follow-up inline, with live counters and live validation as you type. **Add detail & redraft** (`r`) takes one line of context and asks Claude again.
+- Use `j`/`k` (or the arrow keys) to move between cards. The chips switch between Ready to approve, Needs detail, and All.
+
+The **Outbox** tab shows approved messages in the order `send` will go through them, with "Back to review" to pull one out, and every sent note exactly as it went out. Approving only queues a message: nothing is sent until you run `linkreach send`.
+
+The strip under the header shows what the tool is doing right now (for example "send running · last: view · Jane Doe · 3s ago"). The page refreshes every 4 seconds, and the Activity log tab has a Live toggle.
+
 `review` shows `needs_detail` people first. Type one line of context (e.g. "spoke at Grace Hopper about AI hiring") and press Enter to redraft. A draft that fails validation can't be approved, whether from review, the dashboard, or `mark`.
 
 On Windows, `e` opens Notepad unless you set `EDITOR` (for example `$env:EDITOR = "code --wait"`).
@@ -154,6 +167,8 @@ pip install --require-hashes -r requirements-dev.txt
 python -m pytest            # make test
 python scripts/check.py     # make check
 python scripts/demo_dashboard.py   # dashboard with fake data at http://127.0.0.1:8765/#token=demo-token-not-secret
+                                   # (a simulated `send` delivers whatever you approve every ~6 s)
+python scripts/demo_cli.py         # interactive terminal walkthrough with a fake LinkedIn and fake Claude
 ```
 
 The tests use a fake browser (`tests/fakes.py`) and a fake Claude client, so they never touch LinkedIn or the API. They cover caps, the brake, dedupe, status transitions, CAPTCHA stops, crash-resume, injection, dashboard hardening, and log redaction.
@@ -163,6 +178,6 @@ The tests use a fake browser (`tests/fakes.py`) and a fake Claude client, so the
 - **Extra `people` columns:** `user_detail` (your one-line context from review), `validation_errors`, `send_attempted_at` (duplicate-send guard), `updated_at`.
 - **Extra commands:** `init`, `login`, `set-key`, `list`.
 - **Searches** use each company's People tab (`/company/<slug>/people/?keywords=`), which lists only current employees and needs no numeric company ID. With `combine_keywords: true`, each bucket costs one page view (`"a" OR "b"`) instead of one per keyword. An alumni pass (keyword = `alumni_school`) runs first for each company.
-- **Approval** happens only in `review`. The dashboard can set every other status by hand, but not `approved`.
+- **Approval** happens in `review` or the dashboard's Review tab. Both run the same server-side validation, and the generic status dropdown still can't set `approved`.
 - **Templates** for both messages live in `config.yaml`. The model fills in the pieces, and code enforces the 280-character and 150-word limits (3 tries, then flagged for manual edit).
 - **Model:** `claude-sonnet-5-5`, with server-side refusal fallbacks on (`use_refusal_fallbacks`). Prompt caching covers the system prompt and background block. Very short configs may fall under the minimum cacheable size, in which case caching quietly doesn't apply.

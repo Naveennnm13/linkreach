@@ -99,6 +99,18 @@ def validate_draft(
     return res
 
 
+def check(cfg, note: str | None, followup: str | None) -> Result:
+    """validate_draft with the limits and phrases from a Config."""
+    return validate_draft(
+        note,
+        followup,
+        resume_url=cfg.resume_url,
+        banned_phrases=cfg.banned_phrases,
+        note_max_chars=cfg.note_max_chars,
+        followup_max_words=cfg.followup_max_words,
+    )
+
+
 def suspicious_context(text: str) -> list[str]:
     """Reasons a scraped context field should be kept out of the prompt entirely."""
     reasons = []
