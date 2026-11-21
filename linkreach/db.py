@@ -115,6 +115,13 @@ CREATE TABLE IF NOT EXISTS activity_log (
 );
 CREATE INDEX IF NOT EXISTS idx_activity_ts ON activity_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_activity_event ON activity_log(event, timestamp);
+
+-- LinkedIn's numeric id per company slug, so collect doesn't spend a page view on it every run.
+CREATE TABLE IF NOT EXISTS company_ids (
+    slug TEXT PRIMARY KEY COLLATE NOCASE,
+    company_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -164,6 +171,30 @@ class DB:
         return bool(row) and row[0] == "ok"
 
     # ---------- people ----------
+    # ---------- company ids ----------
+    COMPANY_ID_MAX_AGE_DAYS = 90
+
+    def get_company_id(self, slug: str) -> str | None:
+        """Cached LinkedIn company id, or None if unknown or older than 90 days."""
+        row = self.conn.execute("SELECT company_id, updated_at FROM company_ids WHERE slug = ?", (slug,)).fetchone()
+        if row is None or row["updated_at"] < clock.days_ago_iso(self.COMPANY_ID_MAX_AGE_DAYS):
+            return None
+        return row["company_id"]
+
+    def set_company_id(self, slug: str, company_id: str) -> None:
+        if not (company_id or "").isdigit():
+            raise ValueError("company id must be numeric")
+        self.conn.execute(
+            "INSERT INTO company_ids (slug, company_id, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(slug) DO UPDATE SET company_id = excluded.company_id, updated_at = excluded.updated_at",
+            (slug, company_id, clock.now_iso()),
+        )
+        self.conn.commit()
+
+    def forget_company_id(self, slug: str) -> None:
+        self.conn.execute("DELETE FROM company_ids WHERE slug = ?", (slug,))
+        self.conn.commit()
+
     def has_profile(self, profile_url: str) -> bool:
         url = normalize_profile_url(profile_url)
         return self.conn.execute("SELECT 1 FROM people WHERE profile_url = ?", (url,)).fetchone() is not None

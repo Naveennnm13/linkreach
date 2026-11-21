@@ -11,10 +11,11 @@ Every page load goes through `LinkedIn.visit`, which:
 from __future__ import annotations
 
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Callable
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, unquote, urlsplit
 
 from linkreach import logsetup, sanitize
 from linkreach import selectors as S
@@ -69,6 +70,7 @@ class LinkedIn:
         self.command = command
         self.sleep = sleep
         self._loaded_once = False
+        self._company_ids: dict[str, str | None] = {}
 
     # ---------- navigation ----------
     def visit(self, url: str, person_id: int | None = None) -> None:
@@ -110,9 +112,26 @@ class LinkedIn:
         return self.s.exists(S.LOGGED_IN_MARKERS, timeout_ms=5000)
 
     # ---------- search ----------
+    def company_id(self, company_slug: str) -> str | None:
+        """Numeric company id. Read from the company's People tab once (one page view), then
+        cached in the database for 90 days."""
+        if company_slug not in self._company_ids:
+            cid = self.db.get_company_id(company_slug)
+            if cid is None:
+                self.visit(S.COMPANY_PEOPLE_URL.format(slug=quote_plus(company_slug), keywords=""))
+                cid = parse_company_id(self.s.attr(S.COMPANY_ID_LINK, "href", timeout_ms=8000))
+                if cid:
+                    self.db.set_company_id(company_slug, cid)
+            self._company_ids[company_slug] = cid
+        return self._company_ids[company_slug]
+
     def search_company_people(self, company_slug: str, keywords: str) -> list[Candidate]:
-        url = S.COMPANY_PEOPLE_URL.format(slug=quote_plus(company_slug), keywords=quote_plus(keywords))
-        self.visit(url)
+        cid = self.company_id(company_slug)
+        if cid:
+            self.visit(S.PEOPLE_SEARCH_URL.format(keywords=quote_plus(keywords), company_id=cid))
+        else:
+            # Older UI: the People tab filtered by ?keywords= itself.
+            self.visit(S.COMPANY_PEOPLE_URL.format(slug=quote_plus(company_slug), keywords=quote_plus(keywords)))
         self.s.exists(S.PEOPLE_CARD, timeout_ms=8000)
         out: list[Candidate] = []
         for rec in self.s.cards(S.PEOPLE_CARD, S.PEOPLE_CARD_FIELDS):
@@ -125,7 +144,7 @@ class LinkedIn:
             out.append(
                 Candidate(
                     name=name,
-                    title=sanitize.clean_line(rec.get("title", ""), 200),
+                    title=sanitize.clean_line(current_role(rec.get("snippet", "")) or rec.get("title", ""), 200),
                     profile_url=normalize_profile_url(href),
                 )
             )
@@ -142,14 +161,22 @@ class LinkedIn:
         if not p.has_actions:
             p.missing.append("PROFILE_ACTIONS")
         p.name = sanitize.clean_line(name or "", 120)
-        p.headline = sanitize.clean(self.s.text(S.PROFILE_HEADLINE) or "")
+        p.headline = sanitize.clean(
+            self.s.text(S.PROFILE_HEADLINE) or pick_headline(self.s.texts(S.PROFILE_TOPCARD_PARAS), name or "")
+        )
         p.about = sanitize.clean(self.s.text(S.PROFILE_ABOUT) or "")
-        feats = self.s.texts(S.PROFILE_FEATURED)
+        feats = [t for t in self.s.texts(S.PROFILE_FEATURED) if len(t.strip()) > 20] or self.s.texts(S.PROFILE_FEATURED)
         p.featured = sanitize.clean(feats[0] if feats else "")
-        p.education = sanitize.clean(" | ".join(self.s.texts(S.PROFILE_EDUCATION)[:12]), 1000)
+        edu = self.s.texts(S.PROFILE_EDUCATION)[:12] + self.s.texts(S.PROFILE_HIGHLIGHTS)[:6]
+        p.education = sanitize.clean(" | ".join(edu), 1000)
         degree = (self.s.text(S.PROFILE_DEGREE) or "").lower()
-        p.first_degree = "1st" in degree
         p.pending = self.s.exists(S.PENDING_STATE)
+        # The new top card carries a hidden "· 1st" template line, so also require that there is
+        # no Connect for this person and no pending invite: a 1st-degree connection has neither.
+        slug = profile_slug(self.s.url)
+        own = [sel.format(slug=slug) for sel in S.CONNECT_FOR_SLUG] if slug else []
+        can_connect = self.s.exists(own + S.CONNECT_BUTTON)
+        p.first_degree = "1st" in degree and not can_connect and not p.pending
         p.ok = not p.missing
         return p
 
@@ -159,7 +186,11 @@ class LinkedIn:
         Returns a ConnectResult on failure, None when the note box is ready."""
         if self.s.exists(S.PENDING_STATE):
             return ConnectResult("already_pending")
-        if not self.s.click(S.CONNECT_BUTTON, timeout_ms=3000):
+        # Only this profile's own Connect: the invite link carrying its vanity name first, then
+        # top-card-scoped fallbacks. Never a page-wide "Invite X to connect" (other people's).
+        slug = profile_slug(self.s.url)
+        own = [sel.format(slug=slug) for sel in S.CONNECT_FOR_SLUG] if slug else []
+        if not self.s.click(own + S.CONNECT_BUTTON, timeout_ms=3000):
             if not self.s.click(S.MORE_BUTTON, timeout_ms=3000):
                 return ConnectResult("failed", "no Connect or More button")
             if not self.s.click(S.MORE_MENU_CONNECT, timeout_ms=3000):
@@ -196,3 +227,41 @@ class LinkedIn:
 def _url_for_log(url: str) -> str:
     # Keep only the path; no query strings in the activity log.
     return url.split("?", 1)[0][:300]
+
+
+_SLUG_RE = re.compile(r"[A-Za-z0-9%_.-]{1,150}")
+_DEGREE_RE = re.compile(r"^\W*(1st|2nd|3rd)", re.I)
+_PRONOUNS_RE = re.compile(r"^[A-Za-z]+/[A-Za-z]+(/[A-Za-z]+)?$")
+
+
+def profile_slug(url: str) -> str | None:
+    """Vanity name from /in/<slug>/, only if it is safe to put inside a CSS attribute value."""
+    m = re.search(r"/in/([^/?#]+)", urlsplit(url or "").path)
+    if not m:
+        return None
+    slug = m.group(1)
+    return slug if _SLUG_RE.fullmatch(slug) else None
+
+
+def parse_company_id(href: str | None) -> str | None:
+    """'...currentCompany=%5B%221035%22%5D...' -> '1035'."""
+    m = re.search(r'currentCompany=\["?(\d+)', unquote(href or ""))
+    return m.group(1) if m else None
+
+
+def pick_headline(paragraphs: list[str], name: str) -> str:
+    """The new top card has no hook for the headline: it is the first line that is not
+    pronouns, the name, or the '· 2nd' degree marker."""
+    for t in paragraphs:
+        t = (t or "").strip()
+        if len(t) < 3 or t == name or _DEGREE_RE.match(t) or _PRONOUNS_RE.match(t):
+            continue
+        return t
+    return ""
+
+
+def current_role(snippet: str) -> str:
+    """'Current: Senior Technical Recruiter at Microsoft' -> 'Senior Technical Recruiter at Microsoft'.
+    Past roles are ignored so someone who *used to* recruit is not bucketed as a recruiter."""
+    t = " ".join((snippet or "").split())
+    return t[len("current:"):].strip() if t.lower().startswith("current:") else ""

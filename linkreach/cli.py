@@ -155,7 +155,11 @@ def _dispatch(args: argparse.Namespace, ctx: Ctx) -> int:
     if cmd == "dashboard":
         from linkreach.dashboard import server
 
-        server.serve(ctx.inputs, ctx.db.path, open_browser=not args.no_open)
+        try:
+            server.serve(ctx.inputs, ctx.db.path, open_browser=not args.no_open)
+        except server.PortInUse as exc:
+            console.print(f"[red]{exc}[/]")
+            return 1
         return 0
     console.print(f"unknown command {cmd}")
     return 1

@@ -16,7 +16,7 @@ def test_dry_run_prints_and_opens_nothing(env, capsys):
     out = capsys.readouterr().out
     assert "Planned searches" in out
     assert "Microsoft" in out and "Salesforce" in out
-    assert "company/microsoft/people/?keywords=" in out
+    assert "search/results/people/?keywords=" in out and "<microsoft id>" in out
     assert ctx.factory_calls["n"] == 0
     assert env.db.count_events("view", "0000") == 0
 

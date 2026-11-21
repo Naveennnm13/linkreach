@@ -58,11 +58,11 @@ To see where your everyday profile lives (so you know what *not* to use), open `
 Sign in once:
 
 ```bash
-linkreach login       # opens Chrome on the dedicated profile; you type your password into LinkedIn yourself
+linkreach login       # opens plain Chrome on the dedicated profile; sign in, then close the window
 linkreach doctor      # checks selectors, login, API key, caps, DB integrity
 ```
 
-linkreach never asks for, reads, or stores your LinkedIn password. Use LinkedIn's own email and password sign-in: "Sign in with Google/Apple" leaves linkedin.com, and the domain allowlist blocks that.
+linkreach never asks for, reads, or stores your LinkedIn password. `login` opens ordinary Chrome (no automation, no domain filter) on the dedicated profile, because LinkedIn's sign-in loads security-check scripts from other domains and hangs under the filter. Sign in, wait for your feed, then close that window; `login` then checks the session under the normal filtered browser. Every other command runs with the domain allowlist on.
 
 ## Rollout plan
 
@@ -156,6 +156,15 @@ Keep the default "Run only when user is logged on" so Chrome can open a window.
 
 `doctor` fails, or a run stops with `selector_broken` and a screenshot in `~/.linkreach/logs/screenshots/`. Open `linkreach/selectors.py`, where every selector is a list of fallbacks. Inspect the element in the dedicated Chrome profile, put the new selector first, and rerun `linkreach doctor`.
 
+LinkedIn's 2026 UI scrambles CSS class names on every build, so don't use classes. The current selectors (checked live on 2026-11-21) use:
+
+- **Profile cards** whose id ends in their name: `[id$='Topcard']`, `[id$='About']`, `[id$='Featured']`, `[id$='SalesInsightsOrHighlights']` ("You both studied at…", used for the alumni check). Experience and Education only load after scrolling and usually aren't read.
+- **Connect** as the invite link carrying the profile's own vanity name (`a[href*='custom-invite/?vanityName=<slug>']`), then other top-card-scoped controls. Every profile also lists other people with their own "Invite X to connect" buttons, so connect selectors must never be page-wide (a test enforces this).
+- **Send** only as `aria-label='Send invitation'` or exact text `Send`. The first dialog also has "Send without a note", so never match a bare "Send" substring (a test enforces this too).
+- **Search results** where the name is the `/in/` link directly inside a `<p>`, the headline is the next `<p>`, and the "Current: …" snippet is preferred as the title. LinkedIn serves at least two result layouts, and both work.
+
+Not yet seen live, so treat them as unverified until the first real `send`: the Pending state after an invite, and Connect inside the More menu (profiles where Follow is the main button).
+
 ## Exit codes
 
 `0` ok (cap reached counts as ok) · `2` input files invalid · `3` stopped by a CAPTCHA, warning, or off-domain navigation · `5` selectors broken · `6` doctor failed · `7` `--auto` refused (window or brake) · `130` interrupted.
@@ -177,7 +186,8 @@ The tests use a fake browser (`tests/fakes.py`) and a fake Claude client, so the
 
 - **Extra `people` columns:** `user_detail` (your one-line context from review), `validation_errors`, `send_attempted_at` (duplicate-send guard), `updated_at`.
 - **Extra commands:** `init`, `login`, `set-key`, `list`.
-- **Searches** use each company's People tab (`/company/<slug>/people/?keywords=`), which lists only current employees and needs no numeric company ID. With `combine_keywords: true`, each bucket costs one page view (`"a" OR "b"`) instead of one per keyword. An alumni pass (keyword = `alumni_school`) runs first for each company.
+- **Searches:** LinkedIn's People tab now ignores `?keywords=`, so `collect` reads the company's numeric id from that tab (one page view, then cached in the database for 90 days) and searches `/search/results/people/?keywords=…&currentCompany=["<id>"]`, which is current employees only. With `combine_keywords: true`, each bucket costs one page view (`"a" OR "b"`) instead of one per keyword. An alumni pass (keyword = `alumni_school`) runs first for each company.
+- **Bucket shares:** `per_company_limit` is split across buckets in config order (6 over 4 buckets is 2, 2, 1, 1), so one role can't take every slot at a company. A bucket that finds fewer people than its share passes the spare slots to the next bucket in the same run. The alumni pass draws from the same shares, so alumni go first within each bucket. A search whose bucket (or company) is already full is skipped without a page view, and `collect --dry-run` shows each company's shares.
 - **Approval** happens in `review` or the dashboard's Review tab. Both run the same server-side validation, and the generic status dropdown still can't set `approved`.
 - **Templates** for both messages live in `config.yaml`. The model fills in the pieces, and code enforces the 280-character and 150-word limits (3 tries, then flagged for manual edit).
 - **Model:** `claude-sonnet-5-5`, with server-side refusal fallbacks on (`use_refusal_fallbacks`). Prompt caching covers the system prompt and background block. Very short configs may fall under the minimum cacheable size, in which case caching quietly doesn't apply.

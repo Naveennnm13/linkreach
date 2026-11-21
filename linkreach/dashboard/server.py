@@ -14,12 +14,13 @@ Hardening:
 from __future__ import annotations
 
 import secrets
+import time
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from linkreach import clock, logsetup, validate
@@ -29,6 +30,7 @@ from linkreach.safety import brake_status, cap_status, overall_acceptance
 
 PORT = 8765
 HOST = "127.0.0.1"
+LAUNCH_CODE_SECONDS = 120
 ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 TOKEN_HEADER = "x-linkreach-token"
 INDEX = Path(__file__).with_name("index.html")
@@ -84,6 +86,12 @@ def create_app(
     logsetup.add_secret(token)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.token = token
+    # One-time code for opening the browser. On Windows the default-browser handoff can drop the
+    # "#token=..." fragment, so `serve` opens /open?code=... and the server redirects to the
+    # fragment URL itself. The code works once, expires after LAUNCH_CODE_SECONDS, and is not the token.
+    app.state.launch_code = secrets.token_urlsafe(24)
+    app.state.launch_expires = time.monotonic() + LAUNCH_CODE_SECONDS
+    logsetup.add_secret(app.state.launch_code)
     cfg = inputs.config
 
     def db() -> DB:
@@ -109,6 +117,18 @@ def create_app(
         if "content-security-policy" not in response.headers:
             response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'"
         return response
+
+    @app.get("/open")
+    def open_with_code(code: str = "") -> Response:
+        live = app.state.launch_code and time.monotonic() < app.state.launch_expires
+        if not live or not code or not secrets.compare_digest(code, app.state.launch_code):
+            return HTMLResponse(
+                "<!doctype html><title>linkreach</title><p>This link has expired or was already used. "
+                "Close the dashboard window and open the dashboard again from the linkreach menu.</p>",
+                status_code=403,
+            )
+        app.state.launch_code = None  # single use
+        return RedirectResponse(f"/#token={token}", status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:
@@ -550,17 +570,41 @@ def create_app(
     return app
 
 
+class PortInUse(RuntimeError):
+    pass
+
+
+def port_free(host: str = HOST, port: int = PORT) -> bool:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+        except OSError:
+            return False
+    return True
+
+
 def serve(inputs: Inputs, db_path: Path, open_browser: bool = True) -> None:
     import threading
     import webbrowser
 
     import uvicorn
 
+    # Check first: otherwise the browser opens on whatever else holds the port (another dashboard,
+    # or the demo) and that page rejects this run's token.
+    if not port_free():
+        raise PortInUse(
+            f"Port {PORT} is already in use, so another dashboard (or the demo) is still running. "
+            "Close that window, or stop it with Ctrl-C, then open the dashboard again."
+        )
     app = create_app(inputs, db_path)
     url = f"http://{HOST}:{PORT}/#token={app.state.token}"
+    launch = f"http://{HOST}:{PORT}/open?code={app.state.launch_code}"
     if open_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    print(f"linkreach dashboard on http://{HOST}:{PORT}/ (opened in your browser). Ctrl-C to stop.")
-    print("If the page asks for a token, open this link instead:")
+        threading.Timer(1.0, lambda: webbrowser.open(launch)).start()
+    where = " (opening in your browser)" if open_browser else ""
+    print(f"linkreach dashboard on http://{HOST}:{PORT}/{where}. Close this window or press Ctrl-C to stop.")
+    print("If the page says it has no access token, paste this link into your browser:")
     print(url)
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning", access_log=False, server_header=False)

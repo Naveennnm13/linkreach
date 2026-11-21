@@ -293,6 +293,14 @@ async function api(path, opts) {
   });
   let data = null;
   try { data = await res.json(); } catch (e) {}
+  if (res.status === 403 && data && data.error === "missing or bad token") {
+    // A token saved from an earlier dashboard run (each run makes a new one). Forget it.
+    try { sessionStorage.removeItem("linkreach-token"); } catch (e) {}
+    TOKEN = "";
+    const b = document.getElementById("banner");
+    b.textContent = "This page isn't connected to the running dashboard. Close this tab and open the dashboard again from the linkreach menu (option 1).";
+    b.hidden = false;
+  }
   if (!res.ok) {
     const msg = data && (data.detail || data.error) ? (data.detail || data.error) : ("HTTP " + res.status);
     throw new Error(String(msg));
@@ -907,7 +915,7 @@ window.addEventListener("hashchange", () => {
 });
 if (!TOKEN) {
   const b = document.getElementById("banner");
-  b.textContent = "No access token. Open the link printed by `linkreach dashboard`.";
+  b.textContent = "No access token. Open the dashboard from the linkreach menu (option 1), or paste the link shown in the dashboard window.";
   b.hidden = false;
 } else {
   refreshAll();

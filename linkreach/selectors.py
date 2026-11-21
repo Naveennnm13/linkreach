@@ -8,12 +8,27 @@ first. Selectors use Playwright's CSS dialect (`:has-text()`, `:has()`).
 # ---------- URLs ----------
 FEED_URL = "https://www.linkedin.com/feed/"
 LOGIN_URL = "https://www.linkedin.com/login"
-# Company "People" tab, filtered by keyword. Only current employees appear here.
+# Company "People" tab. LinkedIn now ignores ?keywords= here (checked 2026-11-21), so this page
+# is used to read the company's numeric id, and the search runs on PEOPLE_SEARCH_URL instead.
 COMPANY_PEOPLE_URL = "https://www.linkedin.com/company/{slug}/people/?keywords={keywords}"
+# People search limited to current employees of one company. This is where the People tab's own
+# keyword box sends you, and it honours keywords (including OR).
+PEOPLE_SEARCH_URL = (
+    "https://www.linkedin.com/search/results/people/?keywords={keywords}"
+    "&currentCompany=%5B%22{company_id}%22%5D&origin=COMPANY_PAGE_CANNED_SEARCH"
+)
+# Links on the company page that carry its numeric id as currentCompany=["1035"].
+COMPANY_ID_LINK = ["main a[href*='currentCompany=']"]
 
 # ---------- login state ----------
 LOGGED_OUT_URL_PARTS = ["/login", "/authwall", "/signup", "/uas/login", "/checkpoint/lg/"]
 LOGGED_IN_MARKERS = [
+    # Top-bar links that only exist when signed in. LinkedIn's class names are now
+    # scrambled per build (e.g. "cfsjtu cfsjts"), so prefer hrefs over classes.
+    'a[href*="/mynetwork/"]',
+    'a[href*="/messaging/"]',
+    'a[href*="/notifications/"]',
+    # Older UI, kept as fallbacks.
     "nav.global-nav",
     "#global-nav",
     "img.global-nav__me-photo",
@@ -58,95 +73,93 @@ STOP_PHRASES = {
     ],
 }
 
-# ---------- company People tab results ----------
+# ---------- people search results ----------
+# Checked against the live UI on 2026-11-21. Class names are scrambled per build, so these use
+# roles, data-view-name hooks, aria-labels and hrefs. The last entries are the pre-2026 UI.
+# LinkedIn serves at least two result layouts (one with data-view-name hooks, one without).
+# Both put the name link directly inside a <p> next to "• 2nd", with the headline in the next <p>.
 PEOPLE_CARD = [
+    "main div[role='listitem']:has(a[href*='/in/'])",
     "li.org-people-profile-card__profile-card-spacing",
-    "div.org-people-profile-card",
-    "li.grid__col:has(a[href*='/in/'])",
 ]
+_NAME_LINK = "p > a[href*='/in/']"
 PEOPLE_CARD_FIELDS = {
-    "url": (["a[href*='/in/']"], "href"),
-    "name": ([
-        "div.artdeco-entity-lockup__title",
-        "div.org-people-profile-card__profile-title",
-        "a[href*='/in/'] div",
-    ], None),
-    "title": ([
-        "div.artdeco-entity-lockup__subtitle",
-        "div.lt-line-clamp--multi-line",
-    ], None),
+    "url": ([_NAME_LINK, "a[href*='/in/']"], "href"),
+    "name": ([_NAME_LINK, "div.artdeco-entity-lockup__title"], None),
+    "title": (["p:has(> a[href*='/in/']) + div p", "div.artdeco-entity-lockup__subtitle"], None),
+    # "Current: Senior Technical Recruiter at Microsoft" (or "Past: ..."). linkedin.py uses it as
+    # the title only when it says Current, since headlines are often slogans.
+    "snippet": (["[id^='SearchResultssnippet_'] p"], None),
 }
 
 # ---------- profile page ----------
-PROFILE_NAME = ["main h1", "h1.text-heading-xlarge", "h1"]
-PROFILE_HEADLINE = [
-    "main div.text-body-medium.break-words",
-    "div.pv-text-details__left-panel div.text-body-medium",
-]
-PROFILE_TOP_CARD = ["main section.artdeco-card:first-of-type", "section.pv-top-card", "main section"]
+# Every profile section is a card whose id ends in its name: ...Topcard, ...About, ...Featured,
+# ...SalesInsightsOrHighlights. Experience and Education load only after scrolling.
+TOP = "[id$='Topcard']"
+PROFILE_NAME = [f"{TOP} h2", "section[aria-label='Primary content'] h2", "main h1"]
+# Old-UI headline element. The new top card has no hook for it, so linkedin.pick_headline()
+# chooses it from PROFILE_TOPCARD_PARAS (skipping pronouns and the "· 2nd" degree line).
+PROFILE_HEADLINE = ["main div.text-body-medium.break-words"]
+PROFILE_TOPCARD_PARAS = [f"{TOP} p", "section[aria-label='Primary content'] p"]
+PROFILE_TOP_CARD = [TOP, "section[aria-label='Primary content']"]
+# The top card also holds a hidden "· 1st" template line, hence :visible.
 PROFILE_DEGREE = [
+    f"{TOP} p:visible:text-matches('^.{{0,3}}(1st|2nd|3rd)')",
     "main span.dist-value",
-    "main span:has-text('· 1st')",
-    "main span:has-text('1st degree connection')",
 ]
 PROFILE_ABOUT = [
-    "section:has(#about) div.inline-show-more-text span[aria-hidden='true']",
-    "section:has(#about) div.display-flex span[aria-hidden='true']",
+    "[id$='About'] [data-testid='expandable-text-box']",
+    "[id$='About'] p",
     "section:has(#about) span[aria-hidden='true']",
 ]
-PROFILE_FEATURED = [
-    "section:has(#featured) a span[aria-hidden='true']",
-    "section:has(#featured) span[aria-hidden='true']",
-]
-PROFILE_EDUCATION = [
-    "section:has(#education) span[aria-hidden='true']",
-    "section:has(#education)",
-]
-# Top-card action buttons; at least one of these exists on every profile.
+PROFILE_FEATURED = ["[id$='Featured'] li p", "section:has(#featured) span[aria-hidden='true']"]
+PROFILE_EDUCATION = ["[id$='Education'] p", "section:has(#education) span[aria-hidden='true']"]
+# "You both studied at Northeastern University" appears here without scrolling.
+PROFILE_HIGHLIGHTS = ["[id$='SalesInsightsOrHighlights'] p"]
+# Top-card action controls; at least one exists on every profile.
 PROFILE_ACTIONS = [
-    "main button[aria-label*='to connect']",
-    "main button[aria-label^='More actions']",
-    "main button[aria-label*='Pending']",
-    "main button:has-text('Message')",
-    "main button:has-text('Follow')",
+    f"{TOP} [aria-label^='Invite'][aria-label$='to connect']",
+    f"{TOP} button[aria-label='More']",
+    f"{TOP} a[href*='/messaging/compose/']",
+    f"{TOP} button[aria-label^='Follow']",
+    f"{TOP} :is(a, button):has-text('Pending')",
 ]
 
 # ---------- connect flow ----------
+# SAFETY: every profile page also lists other people ("People you may know", "More profiles for
+# you") with their own "Invite X to connect" buttons. Connect selectors must stay inside the top
+# card, and the first choice is the invite link carrying this profile's own vanity name.
+CONNECT_FOR_SLUG = [
+    TOP + " a[href*='custom-invite/?vanityName={slug}&']",
+    TOP + " a[href$='custom-invite/?vanityName={slug}']",
+]
 CONNECT_BUTTON = [
-    "main button[aria-label^='Invite'][aria-label$='to connect']",
-    "main button.pvs-profile-actions__action:has-text('Connect')",
-    "main button:has-text('Connect'):not(:has-text('Connections'))",
+    f"{TOP} [aria-label^='Invite'][aria-label$='to connect']",
+    "section[aria-label='Primary content'] [aria-label^='Invite'][aria-label$='to connect']",
 ]
-MORE_BUTTON = [
-    "main button[aria-label^='More actions']",
-    "main button[aria-label='More']",
-]
+MORE_BUTTON = [f"{TOP} button[aria-label='More']", "section[aria-label='Primary content'] button[aria-label='More']"]
+# Not seen live yet: on the checked profile Connect was on the card and the menu had no Connect.
 MORE_MENU_CONNECT = [
-    "div.artdeco-dropdown__content div[aria-label^='Invite'][aria-label$='to connect']",
-    "div.artdeco-dropdown__content div[role='button']:has-text('Connect')",
-    "div[role='menu'] div:has-text('Connect')",
+    "[role='menu'] [role='menuitem'][aria-label^='Invite'][aria-label$='to connect']",
+    "[role='menu'] [role='menuitem']:has-text('Connect')",
 ]
+# Not seen live yet (needs a sent invitation). Scoped to the top card.
 PENDING_STATE = [
-    "main button[aria-label*='Pending']",
-    "main button:has-text('Pending')",
-    "main button[aria-label^='Withdraw']",
+    f"{TOP} [aria-label^='Pending']",
+    f"{TOP} [aria-label*='withdraw invitation' i]",
+    f"{TOP} :is(a, button):has-text('Pending')",
 ]
-ADD_NOTE_BUTTON = [
-    "div[role='dialog'] button[aria-label='Add a note']",
-    "div[role='dialog'] button:has-text('Add a note')",
-]
+ADD_NOTE_BUTTON = ["[role='dialog'] button[aria-label='Add a note']", "[role='dialog'] button:has-text('Add a note')"]
 NOTE_TEXTAREA = [
-    "div[role='dialog'] textarea[name='message']",
-    "div[role='dialog'] textarea#custom-message",
-    "div[role='dialog'] textarea",
+    "[role='dialog'] textarea[name='message']",
+    "[role='dialog'] textarea#custom-message",
+    "[role='dialog'] textarea",
 ]
+# SAFETY: the first dialog also has "Send without a note". Never match on a bare "Send" substring.
 SEND_BUTTON = [
-    "div[role='dialog'] button[aria-label='Send invitation']",
-    "div[role='dialog'] button[aria-label='Send now']",
-    "div[role='dialog'] button:has-text('Send')",
+    "[role='dialog'] button[aria-label='Send invitation']",
+    "[role='dialog'] button:text-is('Send')",
 ]
-DIALOG_DISMISS = [
-    "div[role='dialog'] button[aria-label='Dismiss']",
-]
+DIALOG_DISMISS = ["[role='dialog'] button[aria-label='Dismiss']"]
 # Shown when LinkedIn asks for the person's email before connecting.
-EMAIL_REQUIRED = ["div[role='dialog'] input[type='email']", "div[role='dialog'] input#email"]
+EMAIL_REQUIRED = ["[role='dialog'] input[type='email']", "[role='dialog'] input#email"]

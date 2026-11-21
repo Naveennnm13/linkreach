@@ -5,12 +5,13 @@ from __future__ import annotations
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Iterator
 
 from rich.console import Console
 
 from linkreach import clock, logsetup, paths
-from linkreach.browser import PlaywrightSession, Session
+from linkreach.browser import PlaywrightSession, Session, open_plain_chrome
 from linkreach.config import Config, Inputs
 from linkreach.db import DB
 from linkreach.linkedin import LinkedIn
@@ -42,6 +43,7 @@ class Ctx:
     input_fn: Callable[[str], str] = input
     api_check: Callable[[str], tuple[bool, str]] | None = None  # doctor's API-key check (tests inject one)
     drafter: object | None = None  # drafting.Drafter (tests inject one with a fake client)
+    open_chrome: Callable[[Path, str], int] = open_plain_chrome  # login's plain-Chrome window
 
     @property
     def cfg(self) -> Config:

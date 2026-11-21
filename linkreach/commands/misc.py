@@ -129,18 +129,19 @@ def login(ctx: Ctx) -> int:
     """Open the dedicated profile so you can sign in to LinkedIn by hand, once."""
     from linkreach import selectors as S
 
+    console.print(
+        "Opening Chrome on the dedicated linkreach profile.\n"
+        "Sign in to LinkedIn there yourself. linkreach never sees or stores your password.\n"
+        "When your feed loads, close that Chrome window to continue. Use this profile for LinkedIn only."
+    )
+    ctx.open_chrome(ctx.cfg.profile_path, S.LOGIN_URL)
+
     session = ctx.session_factory(ctx.cfg)
     try:
-        session.goto(S.LOGIN_URL)
-        console.print(
-            "A Chrome window is open on the dedicated linkreach profile.\n"
-            "Sign in to LinkedIn there yourself. linkreach never sees or stores your password.\n"
-            "Use this profile for LinkedIn only."
-        )
-        ctx.input_fn("Press Enter here once you can see your LinkedIn feed... ")
         session.goto(S.FEED_URL)
-        ok = session.exists(S.LOGGED_IN_MARKERS, timeout_ms=8000)
-        console.print("[green]Signed in.[/]" if ok else "[red]Still not signed in.[/]")
+        url = (session.url or "").lower()
+        ok = not any(p in url for p in S.LOGGED_OUT_URL_PARTS) and session.exists(S.LOGGED_IN_MARKERS, timeout_ms=8000)
+        console.print("[green]Signed in.[/]" if ok else "[red]Still not signed in. Run `linkreach login` again.[/]")
         return 0 if ok else 1
     finally:
         session.close()

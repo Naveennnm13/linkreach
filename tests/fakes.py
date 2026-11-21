@@ -13,11 +13,13 @@ from linkreach.safety import DomainViolation
 
 
 class FakePage:
-    def __init__(self, url: str, body: str = "", elements: dict[str, str] | None = None, cards: list[dict] | None = None):
+    def __init__(self, url: str, body: str = "", elements: dict[str, str] | None = None, cards: list[dict] | None = None,
+                 attrs: dict[str, dict[str, str]] | None = None):
         self.url = url
         self.body = body
         self.elements: dict[str, str] = dict(elements or {})
         self.card_list = cards or []
+        self.attrs: dict[str, dict[str, str]] = dict(attrs or {})
 
     def visible(self) -> dict[str, str]:
         return self.elements
@@ -171,6 +173,12 @@ class FakeSession:
     def cards(self, card, fields) -> list[dict[str, str]]:
         return [dict(c) for c in self.current.card_list]
 
+    def attr(self, selector, name: str, timeout_ms: int = 0) -> str | None:
+        for s in _as_list(selector):
+            if s in self.current.attrs:
+                return self.current.attrs[s].get(name)
+        return None
+
     def click(self, selector, timeout_ms: int = 5000) -> bool:
         s = self._match(selector)
         return False if s is None else self.current.click(s, self)
@@ -209,6 +217,18 @@ def search_page(slug: str, people: list[tuple[str, str, str]]) -> FakePage:
     url = f"https://www.linkedin.com/company/{slug}/people/"
     cards = [{"name": n, "title": t, "url": u} for n, t, u in people]
     return FakePage(url, body="People", elements={S.PEOPLE_CARD[0]: "card"} if cards else {}, cards=cards)
+
+
+def company_page(slug: str, company_id: str) -> FakePage:
+    """New-UI People tab: ignores keywords, but links carry the numeric company id."""
+    href = f"https://www.linkedin.com/search/results/people/?currentCompany=%5B%22{company_id}%22%5D&origin=X"
+    return FakePage(f"https://www.linkedin.com/company/{slug}/people/", body="People", attrs={S.COMPANY_ID_LINK[0]: {"href": href}})
+
+
+def people_search_page(company_id: str, people: list[tuple[str, str, str]]) -> FakePage:
+    url = "https://www.linkedin.com/search/results/people/"
+    cards = [{"name": n, "title": t, "url": u} for n, t, u in people]
+    return FakePage(url, body="Results", elements={S.PEOPLE_CARD[0]: "card"} if cards else {}, cards=cards)
 
 
 def captcha_page(url: str) -> FakePage:

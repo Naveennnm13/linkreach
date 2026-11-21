@@ -67,6 +67,43 @@ def guard_profile_dir(path: Path) -> None:
         raise ProfileGuardError(f"chrome_profile_dir {p} is a profile inside another Chrome user-data folder")
 
 
+def find_chrome() -> Path | None:
+    """Locate the installed Google Chrome executable."""
+    import shutil
+
+    candidates: list[Path] = []
+    if sys.platform.startswith("win"):
+        for env in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+            base = os.environ.get(env)
+            if base:
+                candidates.append(Path(base) / "Google" / "Chrome" / "Application" / "chrome.exe")
+    elif sys.platform == "darwin":
+        candidates.append(Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"))
+    else:
+        for name in ("google-chrome", "google-chrome-stable"):
+            found = shutil.which(name)
+            if found:
+                candidates.append(Path(found))
+    return next((c for c in candidates if c.is_file()), None)
+
+
+def open_plain_chrome(profile_dir: Path, url: str) -> int:
+    """Open ordinary Chrome (no automation, no request filter) on the dedicated profile and
+    wait until you close it. Used only for the one-time manual LinkedIn sign-in, which loads
+    LinkedIn's own security-check scripts from other domains and hangs under the filter."""
+    import subprocess  # nosec B404: fixed executable, no shell, arguments are not user text
+
+    guard_profile_dir(profile_dir)
+    if not host_allowed(url):
+        raise DomainViolation(f"refusing to open non-LinkedIn URL: {urlsplit(url).hostname}")
+    chrome = find_chrome()
+    if chrome is None:
+        raise FileNotFoundError("Google Chrome not found. Install Chrome, then run `linkreach login` again.")
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    args = [str(chrome), f"--user-data-dir={profile_dir}", "--no-first-run", "--new-window", url]
+    return subprocess.run(args, check=False).returncode  # nosec B603
+
+
 def host_allowed(url: str) -> bool:
     parts = urlsplit(url)
     if parts.scheme in INTERNAL_SCHEMES:
@@ -93,6 +130,7 @@ class Session(Protocol):
     def text(self, selector: Selector, timeout_ms: int = 0) -> str | None: ...
     def texts(self, selector: Selector) -> list[str]: ...
     def cards(self, card: Selector, fields: dict[str, tuple[Selector, str | None]]) -> list[dict[str, str]]: ...
+    def attr(self, selector: Selector, name: str, timeout_ms: int = 0) -> str | None: ...
     def click(self, selector: Selector, timeout_ms: int = 5000) -> bool: ...
     def fill(self, selector: Selector, value: str, timeout_ms: int = 5000) -> bool: ...
     def press(self, key: str) -> None: ...
@@ -203,6 +241,22 @@ class PlaywrightSession:
             if vals:
                 return vals
         return []
+
+    def attr(self, selector: Selector, name: str, timeout_ms: int = 0) -> str | None:
+        """Attribute of the first match, visible or not (e.g. an href inside a collapsed menu)."""
+        if timeout_ms:
+            try:
+                self.page.locator(", ".join(_as_list(selector))).first.wait_for(state="attached", timeout=timeout_ms)
+            except Exception:
+                pass
+        for sel in _as_list(selector):
+            loc = self.page.locator(sel).first
+            try:
+                if loc.count():
+                    return loc.get_attribute(name, timeout=1500)
+            except Exception:
+                continue
+        return None
 
     def cards(self, card: Selector, fields: dict[str, tuple[Selector, str | None]]) -> list[dict[str, str]]:
         for cs in _as_list(card):
