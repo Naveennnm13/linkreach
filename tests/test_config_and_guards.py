@@ -83,3 +83,17 @@ def test_dedicated_profile_allowed(env, tmp_path):
 )
 def test_domain_allowlist(url, ok):
     assert host_allowed(url) is ok
+
+
+def test_daily_view_cap_defaults_to_40_and_allows_up_to_60(env):
+    from linkreach.config import Caps
+
+    assert Caps().daily_views == 40
+    assert Caps(daily_views=60).daily_views == 60
+    d = env.inputs_dir
+    cfg = yaml.safe_load((d / "config.yaml").read_text())
+    cfg["caps"]["daily_views"] = 61
+    (d / "config.yaml").write_text(yaml.safe_dump(cfg))
+    with pytest.raises(ConfigError) as exc:
+        load_inputs(d)
+    assert any("daily_views" in p for p in exc.value.problems)

@@ -19,8 +19,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from linkreach import paths
 
-# Absolute ceilings from the build spec. config.yaml may lower these, never raise them.
-MAX_DAILY_VIEWS = 40
+# Absolute ceilings. config.yaml may lower these, never raise them. The build spec set 40 views;
+# raised to 60 at the owner's request (2026-11-21). New configs still default to 40.
+MAX_DAILY_VIEWS = 60
+DEFAULT_DAILY_VIEWS = 40
 MAX_DAILY_REQUESTS = 20
 MAX_WEEKLY_REQUESTS = 80
 
@@ -54,7 +56,7 @@ class Strict(BaseModel):
 
 
 class Caps(Strict):
-    daily_views: int = Field(MAX_DAILY_VIEWS, ge=1, le=MAX_DAILY_VIEWS)
+    daily_views: int = Field(DEFAULT_DAILY_VIEWS, ge=1, le=MAX_DAILY_VIEWS)
     daily_requests: int = Field(MAX_DAILY_REQUESTS, ge=1, le=MAX_DAILY_REQUESTS)
     weekly_requests: int = Field(MAX_WEEKLY_REQUESTS, ge=1, le=MAX_WEEKLY_REQUESTS)
 

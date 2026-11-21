@@ -128,7 +128,7 @@ Keep the default "Run only when user is logged on" so Chrome can open a window.
 
 | Rule | Where |
 | --- | --- |
-| 40 page views/day, 20 requests/day, 80 per rolling 7 days. Config can lower these, never raise them. | `config.py` (ceilings), `safety.py` (counts from `activity_log`) |
+| 40 page views/day by default (config may raise this to at most 60), 20 requests/day, 80 per rolling 7 days. Config can't go above these. | `config.py` (ceilings), `safety.py` (counts from `activity_log`) |
 | Random 8 to 25 s between page loads | `linkedin.py: LinkedIn.visit` |
 | CAPTCHA, security check, "unusual activity", restriction page: log it, stop at once, no retry | `linkedin.py: detect_stop`, phrases and selectors in `selectors.py` |
 | Only approved drafts are sent, and each is re-validated before typing | `commands/send.py` |

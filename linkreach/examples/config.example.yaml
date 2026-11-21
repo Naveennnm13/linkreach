@@ -1,6 +1,6 @@
 # linkreach configuration. Every field is validated at startup.
 
-# Hard caps. You may lower these; values above 40 / 20 / 80 are rejected.
+# Hard caps. You may lower these; values above 60 / 20 / 80 are rejected. 40 views is the safer default.
 caps:
   daily_views: 40        # profile + search page loads per local day
   daily_requests: 20     # connection requests per local day

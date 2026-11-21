@@ -101,6 +101,12 @@ def handle_run_errors(ctx: Ctx, command: str, fn: Callable[[], int]) -> int:
     except CapReached as exc:
         run_end(ctx.db, command, f"cap:{exc.which}")
         console.print(f"[yellow]{exc}. Stopping for today.[/]")
+        if exc.which == "daily view":
+            console.print(
+                "This counts every LinkedIn page linkreach opens (searches, profiles, checks), not invitations. "
+                "Sending one invitation opens that person's profile, so it needs a page view too. "
+                "The count resets at midnight."
+            )
         return EXIT_OK
     except KeyboardInterrupt:
         run_end(ctx.db, command, "interrupted")
